@@ -1,0 +1,7 @@
+package-lock.json
+yarn.lock
+/node_modules/
+voting/node_modules/
+Cargo.lock
+target/
+.DS_Store

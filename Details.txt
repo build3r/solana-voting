@@ -1,0 +1,2 @@
+Solana voting contarct
+program_id = 2JQ1xKBvnrXzwPXMSf7u2kAp5XNG1W6zzuaN8eRapC7x
