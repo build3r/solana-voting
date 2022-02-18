@@ -2,12 +2,16 @@ use solana_program::{
     account_info::{next_account_info, AccountInfo},
     entrypoint,
     entrypoint::ProgramResult,
+    instruction::{AccountMeta, Instruction},
     msg,
+    program::invoke,
     program_error::ProgramError,
+    system_instruction, system_program,
     pubkey::Pubkey,
 };
 use borsh::{BorshDeserialize, BorshSerialize, BorshSchema};
 use std::mem;
+use std::collections::HashMap;
 
 /* 
 Here is the plan
@@ -38,19 +42,32 @@ pub struct Proposal {
     pub name : String,
     pub voteCount : u32,
 }
-#[derive(Clone, Debug, Default, BorshDeserialize, BorshSerialize, BorshSchema)]
+
+#[derive(Clone, Debug, BorshDeserialize, BorshSerialize, BorshSchema)]
+pub struct StringStruct {
+    pub data: String
+}
+    
+#[derive(Clone, Debug, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub struct Ballot {
     pub name: String,
-    pub chairPerson : String,
+    pub chairPerson : Pubkey,
     pub proposals: Vec<Proposal>,
     pub voters: HashMap<String, Voter>, //user public address of the voter to get if he has already voted
 }
 
+
+entrypoint!(process_instruction);
 //This starts the elections
+//Ballot is also an account owned by voting program
 // Ballot -> n Proposals(hardcoded) -> n Voters
 //Chair person = who started the ballot
-fn create_ballot(name : &String, chairPersonKey: &String) -> bool {
+/* fn create_ballot(program_id: &Pubkey, ballot_acc: &AccountInfo, name : &String, chairPersonAcc: &AccountInfo, system_program_account: &AccountInfo) -> Option<bool> {
     //Save proposal to Program chain
+    msg!("creating ballot name {:?}", name);
+    msg!("ballot acc {:?}", ballot_acc);
+    msg!("name {:?}", name);
+    msg!("chairPersonKey {:?}", chairPersonAcc.key);
     let all_proposals = (0..3).map(|i| Proposal {
         id: i as u8,
         name: format!("Propsal {}", i).to_string(),
@@ -58,52 +75,120 @@ fn create_ballot(name : &String, chairPersonKey: &String) -> bool {
     }).collect();
     let mut ballot = Ballot {
         name: name.to_string(),
-        chairPerson: chairPersonKey.to_string(),
+        chairPerson: *chairPersonAcc.key,
         proposals: all_proposals,
         voters: HashMap::new(),
     };
-    msg!!("Ballot created {:#?}", ballot);
-    true
-}
+    msg!("Ballot in memory {:#?}", ballot);
+    let mut ballot_data_serialized = ballot.try_to_vec().unwrap();
+    invoke(&system_instruction::create_account(
+            &*chairPersonAcc.key,
+            &*ballot_acc.key,
+            500*1_000_000_000,
+            (ballot_data_serialized.len() + 800) as u64,
+            program_id,
+        ),
+        &[ //you need to pass all accounts invloved for txn to take place
+            chairPersonAcc.clone(),
+            ballot_acc.clone(),
+            system_program_account.clone(),
+        ],
+    ).ok()?;
 
-entrypoint!(process_instruction);
-//This starts the elections
-// Ballot -> n Proposals(hardcoded) -> n Voters
-//Chair person = who started the ballot
-fn create_ballot(name : &String, chairPersonKey: Pubkey) -> bool {
-    //Save proposal to Program chain
-    let all_proposals = (0..3).map(|i| Proposal {
-        name: format("Propsal {}", i).to_string(),
-        voteCount: 0,
-    }).collect();
-    let mut ballot = Ballot {
-        name: name.to_string(),
-        chairPerson: chairPersonKey,
-        proposals: all_proposals,
-        voters: HashMap::new(),
-    };
-    msg!("Ballot created {:#?}", ballot);
-    true
-}
+    msg!("Ballot account creatd {:#?}", ballot_acc);
+    // Make this program the owner of the new account
+    invoke(
+        &system_instruction::assign(ballot_acc.key, program_id),
+        &[ballot_acc.clone(), system_program_account.clone()],
+    ).ok()?;
 
+    // Write the serialized data to the time slot account
+    ballot_data_serialized.swap_with_slice(*ballot_acc.try_borrow_mut_data().ok()?);
+
+    msg!("Ballot account data {:#?}", ballot_acc);
+    Some(true)
+} */
+fn vote(data: &[u8]) {
+    msg!("vote data {:?}", data);
+}
+fn read_account(data: &[u8]) {
+    msg!("read_account data {:?}", data);
+}
 fn process_instruction(
     program_id: &Pubkey,      // Public key of program account
-    accounts: &[AccountInfo], // data accounts
-    instruction_data: &[u8],  // 0 = create proposal, 1 = vote
+    accounts: &[AccountInfo], // data accounts , caller, ballot account and system program
+    instruction_data: &[u8],  // 0 = error 1 = create proposal, 2 = vote
 ) -> ProgramResult {
     msg!("Rust program entrypoint");
     
     // Iterating accounts is safer then indexing
     let accounts_iter = &mut accounts.iter();
-    let (tag, rest) = input.split_first().ok_or(-1)?;
-    ok(
-        match tag {
+    let chairPersonAcc = next_account_info(accounts_iter)?;
+    let ballot_acc = next_account_info(accounts_iter)?;
+    let system_program_account = next_account_info(accounts_iter)?;
+    let (tag, rest) = instruction_data.split_first().unwrap_or_else(||{
+        msg!("err unwrapping");
+        (&0, &[0])
+    });
 
-        }
-    )
-    
+    msg!("tag : {} rest {:?}", tag, rest);
+    match tag {
+        1 => {
+            msg!("invoked for create ballot");
+            let rest_data: StringStruct = BorshDeserialize::try_from_slice(rest)?;
+            let name: String = rest_data.data.clone();
+            msg!("creating ballot with name {:?}", name);
+            ///create_ballot(&program_id, &ballot_acc, &name, &calling_account, &system_program_account);
 
-    Ok(())
+            msg!("creating ballot name {:?}", name);
+            msg!("ballot acc {:?}", ballot_acc);
+            msg!("name {:?}", name);
+            msg!("chairPersonKey {:?}", chairPersonAcc.key);
+            let all_proposals = (0..3).map(|i| Proposal {
+                id: i as u8,
+                name: format!("Propsal {}", i).to_string(),
+                voteCount: 0,
+            }).collect();
+            let mut ballot = Ballot {
+                name: name.to_string(),
+                chairPerson: *chairPersonAcc.key,
+                proposals: all_proposals,
+                voters: HashMap::new(),
+            };
+            msg!("Ballot in memory {:#?}", ballot);
+            let mut ballot_data_serialized = ballot.try_to_vec().unwrap();
+            let create_result = invoke(&system_instruction::create_account(
+                    &*chairPersonAcc.key,
+                    &*ballot_acc.key,
+                    500*1_000_000_000,
+                    (ballot_data_serialized.len()) as u64,
+                    program_id,
+                ),
+                &[ //you need to pass all accounts invloved for txn to take place
+                    chairPersonAcc.clone(),
+                    ballot_acc.clone(),
+                    system_program_account.clone(),
+                ],
+            ).unwrap();
+            msg!("Ballot create_result {:#?}", create_result);
+            msg!("Ballot account creatd {:#?}", ballot_acc);
+            // Make this program the owner of the new account
+            let result = invoke(
+                &system_instruction::assign(ballot_acc.key, program_id),
+                &[ballot_acc.clone(), system_program_account.clone()],
+            ).unwrap();
+            msg!("assign result {:?}", result);
+        
+            // Write the serialized data to the time slot account
+            ballot_data_serialized.swap_with_slice(*ballot_acc.try_borrow_mut_data().unwrap());
+        
+            msg!("Ballot account data {:#?}", ballot_acc);
+        },
+        2 => vote(rest),
+        3 => read_account(rest),
+        _ => msg!("Unknown instruction"),
+    }
+    Ok(())  
 }
 
 /* // tests
