@@ -108,11 +108,31 @@ entrypoint!(process_instruction);
     msg!("Ballot account data {:#?}", ballot_acc);
     Some(true)
 } */
-fn vote(data: &[u8]) {
-    msg!("vote data {:?}", data);
+fn vote(voter_public_key: &Pubkey, vote: &mut Voter, ballot_acc: &AccountInfo) {
+    msg!("vote data {:?}", vote);
+    let mut ballot: Ballot  = BorshDeserialize::try_from_slice(&ballot_acc.try_borrow_data().unwrap()).unwrap();
+    msg!("Initial Ballot data {:?}", ballot);
+    match ballot.voters.get(&(voter_public_key.to_string())) {
+        Some(voter_data) => msg!("voter already there {:?}: {:#?}", voter_public_key, voter_data),
+        None => {
+            msg!("No data present for {:?} .", voter_public_key);
+            let (mut proposal) = ballot.proposals.get_mut(vote.vote_for as usize).unwrap();
+            proposal.voteCount = proposal.voteCount +1;
+            let mut vote_clone  = vote.clone();
+            vote_clone.voted = true;
+            ballot.voters.insert(voter_public_key.to_string(), vote_clone);
+            msg!("Ballot data after vote {:?}", ballot);
+            let mut ballot_data_serialized = ballot.try_to_vec().unwrap();
+            ballot_data_serialized.swap_with_slice(*ballot_acc.try_borrow_mut_data().unwrap());
+            msg!("Ballot data writter to chain ");
+
+        },
+    }
+
 }
-fn read_account(data: &[u8]) {
-    msg!("read_account data {:?}", data);
+fn read_account(ballot_acc: &AccountInfo) {
+    let ballot: Ballot  = BorshDeserialize::try_from_slice(&ballot_acc.try_borrow_data().unwrap()).unwrap();
+    msg!("Ballot data {:?}", ballot);
 }
 fn process_instruction(
     program_id: &Pubkey,      // Public key of program account
@@ -123,8 +143,8 @@ fn process_instruction(
     
     // Iterating accounts is safer then indexing
     let accounts_iter = &mut accounts.iter();
-    let chairPersonAcc = next_account_info(accounts_iter)?;
-    let ballot_acc = next_account_info(accounts_iter)?;
+    let calling_account = next_account_info(accounts_iter)?;
+    let mut ballot_acc = next_account_info(accounts_iter)?;
     let system_program_account = next_account_info(accounts_iter)?;
     let (tag, rest) = instruction_data.split_first().unwrap_or_else(||{
         msg!("err unwrapping");
@@ -139,7 +159,7 @@ fn process_instruction(
             let name: String = rest_data.data.clone();
             msg!("creating ballot with name {:?}", name);
             ///create_ballot(&program_id, &ballot_acc, &name, &calling_account, &system_program_account);
-
+            let chairPersonAcc = calling_account;
             msg!("creating ballot name {:?}", name);
             msg!("ballot acc {:?}", ballot_acc);
             msg!("name {:?}", name);
@@ -182,10 +202,19 @@ fn process_instruction(
             // Write the serialized data to the time slot account
             ballot_data_serialized.swap_with_slice(*ballot_acc.try_borrow_mut_data().unwrap());
         
-            msg!("Ballot account data {:#?}", ballot_acc);
         },
-        2 => vote(rest),
-        3 => read_account(rest),
+        2 => {
+            //do this voting here
+            msg!("invoked for vote");
+            let mut vote_data: Voter = BorshDeserialize::try_from_slice(rest)?;
+
+            msg!("vote data {:?}", vote_data);
+            vote(&calling_account.key, &mut vote_data, &mut ballot_acc);
+        },
+        3 => {
+            msg!("Reading Data");
+            read_account(&ballot_acc)
+        },
         _ => msg!("Unknown instruction"),
     }
     Ok(())  

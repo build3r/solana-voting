@@ -3,7 +3,15 @@ import {
     getDefaultWallet,
     getProgramId,
     invokeProgram,
-    createBallot
+    createBallot,
+    readData,
+    ballotAcc,
+    voter1,
+    voter2,
+    getWeb3AccInfo,
+    vote,
+    programWallet,
+    getWeb3ProgramAccounts
   } from './setup.js';
   import * as borsh from "borsh";
   async function main() {
@@ -20,7 +28,19 @@ import {
   
     // Say hello to an account
     //await invokeProgram();
-    await createBallot("Presidential Election 2022");
+    //await createBallot("Presidential Election 2022");
+    const votingProgAcc = await getWeb3ProgramAccounts(programWallet);
+    console.log('votingProgAcc ', votingProgAcc );
+/*     const inidata = await getWeb3AccInfo(ballotAcc);
+
+    console.log('Before vote data', inidata);
+
+    await vote(voter1, 0);
+
+    const data = await getWeb3AccInfo(ballotAcc);
+
+    console.log('After vote data', data); */
+    //await readData("");
   
     // Find out how many times that account has been greeted
     //await reportGreetings();
