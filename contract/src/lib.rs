@@ -123,9 +123,9 @@ fn vote(voter_public_key: &Pubkey, vote: &mut Voter, ballot_acc: &AccountInfo) {
             ballot.voters.insert(voter_public_key.to_string(), vote_clone);
             msg!("Ballot data after vote {:?}", ballot);
             let mut ballot_data_serialized = ballot.try_to_vec().unwrap();
+            ballot_acc.realloc((ballot_data_serialized.len()) as usize, false).unwrap();
             ballot_data_serialized.swap_with_slice(*ballot_acc.try_borrow_mut_data().unwrap());
             msg!("Ballot data writter to chain ");
-
         },
     }
 
